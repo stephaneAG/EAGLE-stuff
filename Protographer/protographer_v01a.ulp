@@ -1,0 +1,618 @@
+/*
+  Run Stuff - test program to run a script in Eagle
+*/
+
+
+// ==== INCLUDES ====
+#include "json.inc" // to support json ( parsing only )
+
+
+// ==== VARS ====
+//string Months[]= {"Jan","Feb","Mar","Apr","May","June","July","Aug","Sept","Oct","Nov","Dec"};
+//int t = time();
+// -- parts generation --
+string CMD,text;
+// -- json parsing --
+string json_data;
+string supportedTypes[]= {"UL_HOLE","UL_PAD","UL_SMD", "UL_WIRE", "UL_POLYGON"};
+//string supportedTypes[]= {"UL_HOLE","UL_PAD","UL_SMD"}; // works fine
+
+// ==== HANDLERS ====
+// -- TEXT TEST --
+/*
+void testTextGeneration() {
+  text = ""; // reset string buffer
+  CMD = "GRID INCH;LAYER 21;"; // change grid to inches units, layer to 21
+  CMD += "CHANGE SIZE 0.066;"; // change text size
+  CMD += "CHANGE RATIO 15%;"; // change ratio
+  CMD += "CHANGE FONT VECTOR;"; // change font type
+  sprintf(text,"TEXT '%d %s %d'",t2day(t),Months[t2month(t)],t2year(t)); // generate the text corresponding to the current date
+  CMD += text; // add text generation command to "on-the-fly" script
+}
+*/
+
+// -- UL_HOLE OBJECTS --
+// Eagle UI top-toolbar attributes:
+// - Drill
+//
+// Eagle UI infos ( object properties ):
+// - Drill
+// - Position
+//
+// UL_HOLE data members:
+// - diameter[layer]	int (see note)
+// - drill		        int
+// - drillsymbol	    int
+// - x, y		          int (center point)
+
+// generate a hole from passed parameters
+void drawHole (real cx, real cy, real drill) {
+  //CMD = "GRID MM;"; // change grid & units to mm
+  CMD += "GRID MM;"; // change grid & units to mm - using '+=' allows use to do multiple stuff ? ..
+  text = ""; sprintf(text, "CHANGE DRILL %f;\n", drill); CMD += text;
+  text = ""; sprintf(text, "HOLE (%f %f);\n", cx, cy); CMD += text;
+}
+
+// list holes present in the current package
+void testHolesListing(){
+  text = "";
+  package(P){ // only current package ? ( that is, the one from the currently opened lib that's in the package editor window .. )
+  sprintf(text, "Package: %s\n", P.name);
+  dlgMessageBox(text,"+OK");
+  text = "";
+    P.holes(H){ // syntax error right there ?
+      sprintf(text, "\nHole: (%f %f), drill=%f\n", u2mm(H.x), u2mm(H.y), u2mm(H.drill) );
+      CMD += text;
+    }
+  }
+  sprintf(text, "Holes found: %s", CMD );
+  dlgMessageBox(CMD,"+OK");
+  CMD = "";
+}
+
+// generate a hole in the current package
+void testHoleGeneration() {
+  CMD = "GRID MM;"; // change grid & units to mm
+  CMD += "CHANGE DRILL 1.38;"; // change hole drill size
+  CMD += "HOLE (-4.0 -4.0);"; // generate a hole at -4 -4 from the center
+}
+
+
+// -- UL_PAD OBJECTS --
+// Eagle UI top-toolbar attributes:
+// - Shape ( square, round, octagonal, long, offset )
+// - Diameter
+// - Drill
+// - Angle
+//
+// Eagle UI infos ( object properties ):
+// - Name
+// - Position
+// - Angle
+// - Diameter
+// - Drill
+// - Shape
+// - Thermal ( check )
+// - Stop ( check )
+// - First ( uncheck )
+//
+// UL_PAD data members:
+// - angle		        real (0.0...359.9)
+// - diameter[layer]	int
+// - drill		        int
+// - drillsymbol	    int
+// - elongation	      int
+// - flags		        int (PAD_FLAG_...)
+// - name		          string (PAD_NAME_LENGTH)
+// - shape[layer]	    int (PAD_SHAPE_...)
+// - signal		        string
+// - x, y		          int (center point, see note)
+
+// generate a very simple SMD from passed parameters
+void drawPAD (real cx, real cy, real diameter, real drill, string shape, real angle, string flags, string name) {
+  CMD += "GRID MM;\n"; // change grid & units to mm
+  text = ""; sprintf(text, "CHANGE DRILL %f;\n", drill); CMD += text;
+  text = ""; sprintf(text, "PAD %f %s R%.1f %s '%s' (%f %f);\n", diameter, shape, angle, flags, name, cx, cy); CMD += text;
+}
+
+
+// -- UL_SMD OBJECTS --
+// Eagle UI top-toolbar attributes:
+// - Layer
+// - Size
+// - Roundness
+// - Angle
+//
+// Eagle UI infos ( object properties ):
+// - Name
+// - Position
+// - Angle
+// - Size
+// - Layer
+// - Roundness
+// - Thermal ( check )
+// - Stop ( check )
+// - Cream ( check )
+//
+// UL_SMD data members:
+// - angle		            real (0.0...359.9) int (size)
+// - dx[layer], dy[layer]	int (SMD_FLAG_...)
+// - flags		            int (see note)
+// - layer		            int
+// - name		              string (SMD_NAME_LENGTH)
+// - roundness	          int (see note)
+// - signal		            string
+// - x, y		              int (center point, see note)
+
+// generate a very simple SMD from passed parameters
+void drawSMD (real dx, real dy, real cx, real cy, int roundness, real angle, string flags, string name, int layer) {
+  //CMD = "GRID MM;"; // change grid & units to mm
+  CMD += "GRID MM;\n"; // change grid & units to mm - using '+=' allows use to do multiple stuff ? ..
+  // adjust layer
+  text = "";
+  if(layer != 1 || layer != 16) layer = 1; // override for not allowed layers ( shouldn't hapen anyway .. )
+  //sprintf(text, "CHANGE LAYER %d;\n", layer); // R: layers for SMD are either 1 ( Top ) or 16 ( Bottom ) - doesn't work ? ..
+  //sprintf(text, "LAYER %3d;\n", layer); // R: https://stackoverflow.com/questions/2806093/what-does-3d-mean-in-a-printf-statement
+  //sprintf(text, "LAYER 16;\n", layer); // R: https://stackoverflow.com/questions/2806093/what-does-3d-mean-in-a-printf-statement
+  //sprintf(text, "LAYER  16;\n"); // R: layers for SMD are either 1 ( Top ) or 16 ( Bottom ) - doesn't work here ..
+  //sprintf(text, "LAYER  BOTTOM;\n"); // works in the ui ? -> but not from our file ..
+  sprintf(text, "CHANGE LAYER   16;\n"); // works ?
+
+  CMD += text;
+
+  // add SMD
+  text = "";
+  sprintf(text, "SMD %f %f -%d R%.1f %s '%s' (%f %f);\n", dx, dy, roundness, angle, flags, name, cx, cy);
+  //sprintf(text, "LAYER 16;SMD %f %f -%d R%.1f %s '%s' (%f %f);\n", dx, dy, roundness, angle, flags, name, cx, cy); - not taken in account :/ ..
+  //sprintf(text, "LAYER TOP;SMD %f %f -%d R%.1f %s '%s' (%f %f);\n", dx, dy, roundness, angle, flags, name, cx, cy); - not taken in account :/ ..
+  CMD += text;
+}
+
+
+// -- UL_WIRE OBJECTS --
+// Eagle UI top-toolbar attributes:
+// - Layer
+// - WireBend
+// - Radius
+// - Miter
+// - width
+// - Style
+//
+// Eagle UI infos ( object properties ):
+// - Position
+// - Width
+// - Style
+// - Layer
+// - Curve
+//
+// UL_WIRE data members:
+// TODO: digg those ;)
+
+// generate a line in the current package
+void testLineGeneration(){
+  CMD = "GRID MM;\n"; // change grid & units to mm
+  CMD += "SET WIDTH 1.38;\n"; // change line width
+  //CMD += "CHANGE POUR SOLID;\n"; // generate either a filled or empty polygon
+  CMD += "SET WIRE_BEND 2;\n";
+  CMD += "CHANGE LAYER 21;\n";
+  CMD += "Change Font Vector;\n";
+  CMD += "Wire 1 (10.00 10.00) (14.08 10.28);\n";
+  CMD += "Wire 1 (14.08 10.28) (12.11 13.11);\n";
+  CMD += "Wire 1 (12.11 13.11) (11.11 11.85);\n";
+  CMD += "Wire 1 (11.11 11.85) (8.73 12.99);\n";
+  CMD += "Wire 1 (8.73 12.99) (10.00 10.00);\n";
+}
+
+// generate a WIRE ( R: is deprecated in favor to LINE ? TODO: digg that ! ) from passed parameters
+//void drawLine (int layer, real strokeWidth, int wireBend, real[] pathPoints, int pathPointsLen) {
+//void drawLine (int layer, real strokeWidth, int wireBend, real pathPoints[], int pathPointsLen) {
+/*
+void drawLine (int layer, real strokeWidth, int wireBend, real pathPoints[][], int pathPointsLen) {
+  CMD += "GRID MM;\n"; // change grid & units to mm
+  text = ""; sprintf(text, "SET WIDTH  %f;\n", strokeWidth); CMD += text;
+  text = ""; sprintf(text, "SET WIRE_BEND  %d;\n", wireBend); CMD += text;
+  text = ""; sprintf(text, "CHANGE LAYER %3d;\n", layer); CMD += text;
+  for(int i=0; i < pathPointsLen; i++){
+    //real thesePathPts[] = pathPoints[i]; // syntax error ?
+    real x1 = pathPoints[i][0];
+    real y1 = pathPoints[i][1];
+    real x2 = pathPoints[i][2];
+    real y2 = pathPoints[i][3];
+
+    //text = ""; sprintf(text, "Wire %f (%f %f) (%f %f);\n", strokeWidth, pathPoints[i][0], pathPoints[i][1], pathPoints[i][2], pathPoints[i][3]); CMD += text;
+    //text = ""; sprintf(text, "Wire %f (%f %f) (%f %f);\n", strokeWidth, thesePathPts[0], thesePathPts[1], thesePathPts[2], thesePathPts[3]); CMD += text;
+    text = ""; sprintf(text, "Wire %f (%f %f) (%f %f);\n", strokeWidth, x1, y1, x2, y2); CMD += text;
+  }
+
+}
+*/
+// R: Eagle/ULP DOES NOT SUPPORT MULTI-DIMENSIONAL ARRAYS :/
+// arr[][] -> https://www.programiz.com/c-programming/c-arrays-functions
+// ULP :/ -> https://www.element14.com/community/thread/21553/l/multidimesional-arry-variable-in-ulp?displayFullThread=true
+// fallback -> https://en.wikipedia.org/wiki/Parallel_array
+void drawLine (real x1, real y1, real x2, real y2, int layer, real strokeWidth, int wireBend) {
+  CMD += "GRID MM;\n"; // change grid & units to mm
+  text = ""; sprintf(text, "CHANGE STYLE %s;\n", "Continuous"); CMD += text; // continuous / longdash / shortdash / dashdot
+  text = ""; sprintf(text, "SET WIDTH %f;\n", strokeWidth); CMD += text;
+  text = ""; sprintf(text, "SET WIRE_BEND %d;\n", wireBend); CMD += text;
+  text = ""; sprintf(text, "CHANGE LAYER %3d;\n", layer); CMD += text;
+  text = ""; sprintf(text, "Wire %f (%f %f) (%f %f);\n", strokeWidth, x1, y1, x2, y2); CMD += text;
+}
+
+
+// generate a polygon in the current package
+void testPolygonGeneration(){
+  CMD = "GRID MM;\n"; // change grid & units to mm
+  CMD += "SET WIDTH 1.38;\n"; // change line width
+  CMD += "CHANGE POUR SOLID;\n"; // generate either a filled polygon ( other opts hatched or cutout-> limited to signal layers )
+  //CMD += "SET WIRE_BEND xxx;\n"; // may be useful
+  //CMD += "MITER xxx;\n"; // may be useful
+  //CMD += "CHANGE THERMALS on/off;\n";
+  //CMD += "CHANGE ORPHANS on/off;\n";
+  //CMD += "ISOLATE xxx;\n";
+  //CMD += "RANK xxx;\n";
+  //CMD += "SPACING xxx;\n";
+  CMD += "CHANGE LAYER 21;\n";
+  //CMD += "POLYGON width 'name' (x1 y1) (x2 y2) (x3 y3) ..;\n"; for signal layers ?
+  //CMD += "POLYGON width (x1 y1) (x2 y2) (x3 y3) ..;\n"; // worked for me once in the Eagle UI on layer 21
+  //CMD += "POLYGON width (1 1) (2 1) (2 -1) (1 -1);\n"; // worked for me once in the Eagle UI on layer 21
+  CMD += "POLYGON 1 (1 1) (2 1) (2 -1) (1 -1);\n"; // works BUT REMEMBER IT NEEDS "CHANGE LAYER <n>" (else it won't work :| .. )
+}
+
+void drawPolygon(real strokeWidth, int layer, string pathPointsStr){
+  CMD += "GRID MM;\n"; // change grid & units to mm
+  //CMD += "SET WIDTH 1.38;\n"; // change line width
+  //CMD += "SET WIDTH 0.1;\n"; // change line width
+  CMD += "CHANGE POUR SOLID;\n"; // generate either a filled polygon ( other opts hatched or cutout-> limited to signal layers )
+  text = ""; sprintf(text, "SET WIDTH %4f;\n", strokeWidth); CMD += text;
+  text = ""; sprintf(text, "CHANGE LAYER %3d;\n", layer); CMD += text;
+  //CMD += "POLYGON width (1 1) (2 1) (2 -1) (1 -1);\n"; // worked for me once in the Eagle UI on layer 21
+  text = ""; sprintf(text, "POLYGON %f %s;\n", strokeWidth, pathPointsStr); CMD += text;
+}
+
+
+// -- PACKAGE LISTING --
+void testLibraryPackagesListing(){
+  library(L) {
+  L.packages(PAC) {
+    //printf("Package: %s\n", PAC.name);
+    sprintf(text, "Package: %s\n", PAC.name);
+    dlgMessageBox(text,"+OK");
+    text = "";
+    PAC.contacts(C) {
+      if (C.pad) sprintf(text, "\tPad: %s, (%f %f)\n", C.name, u2mm(C.pad.x), u2mm(C.pad.y) );
+      else if (C.smd) sprintf(text, "\tSmd: %s, (%f %f)\n", C.name, u2mm(C.smd.x), u2mm(C.smd.y) );
+      dlgMessageBox(text,"+OK");
+      text = "";
+    }
+  }
+ }
+}
+
+
+
+// ==== OBJECTS GENERATION ====
+void generateObjectFromJson(string supportedType){
+  string typedObjects = json_GetKeyItem(json_data, supportedType); // get "UL_HOLE" or any other supported types
+  int cntr = json_GetArrayCount(typedObjects); // get the number of elements of a particular type
+
+  // debug
+  text = ""; sprintf(text, "We have %d %s items", cntr, supportedType);
+  //dlgMessageBox(text,"+OK");
+
+  // loop over objects of a particular type
+  for(int i=0; i < cntr; i++){
+    string tyObj = json_GetArrayItem(typedObjects, i); // get all the element's attributes
+    //dlgMessageBox(tyObj,"+OK");
+    // generate correct object from type - currently has syntax error :/ ..
+
+    if(supportedType == "UL_HOLE"){
+      //drawHole( strtod(tyObj.cx), strtod(tyObj.cy), strtod(tyObj.drill) ); // strtod() gets reals ( float with 15 decimals ) from strings
+      /* - the following works -
+      real cx =     strtod( json_GetKeyItem(tyObj, "cx") );
+      real cy =     strtod( json_GetKeyItem(tyObj, "cy") );
+      real drill =  strtod( json_GetKeyItem(tyObj, "drill") );
+      drawHole( cx, cy, drill );
+      */
+      drawHole( strtod( json_GetKeyItem(tyObj, "cx") ),
+                strtod( json_GetKeyItem(tyObj, "cy") ),
+                strtod( json_GetKeyItem(tyObj, "drill") )
+              );
+    } else if(supportedType == "UL_PAD"){
+      //drawPAD ( strtod(tyObj.cx), strtod(tyObj.cy), strtod(tyObj.diameter), strtod(tyObj.drill), tyObj.shape, strtod(tyObj.angle), tyObj.flags, tyObj.name);
+
+      /*
+      string shape, flags;
+      int shapeC, flagsC;
+      //string shapeOK;
+      //sprintf(shape, "%s", json_GetKeyItem(tyObj, "shape") );
+      shape = json_GetKeyItem(tyObj, "shape");
+      flags = json_GetKeyItem(tyObj, "flags");
+
+      // - dbg -
+      //string dbg = "";
+      //sprintf(dbg, "PAD_SHAPE_SQUARE const: [%d]", PAD_SHAPE_OCTAGON );
+      //dlgMessageBox(dbg,"+OK");
+
+      // PAD_SHAPE_SQUARE   0
+      // PAD_SHAPE_ROUND	  1
+      // PAD_SHAPE_OCTAGON  2
+      // PAD_SHAPE_LONG	    3
+      // PAD_SHAPE_OFFSET	  4
+      if(shape == "square") shapeC = PAD_SHAPE_SQUARE;
+      else if(shape == "Round"){ shapeC = PAD_SHAPE_ROUND; dlgMessageBox("Shape is ROUND","+OK"); }
+      else if(shape == "octagon") shapeC = PAD_SHAPE_OCTAGON;
+      else if(shape == "long") shapeC = PAD_SHAPE_LONG;
+      else if(shape == "offset") shapeC = PAD_SHAPE_OFFSET;
+
+      // - dbg -
+      string dbg = "";
+      sprintf(dbg, "Shape: [%s]  -> Const: [%d]", shape, shapeC );
+      dlgMessageBox(dbg,"+OK");
+
+      //shape = "Round"; //json_GetKeyItem(tyObj, "shape"); -> works fine when JSON doesn't has any parenthesis in its value ?! -> that's dirty !
+      flags = ""; //json_GetKeyItem(tyObj, "flags");
+      //sprintf(flags, "%s", json_GetKeyItem(tyObj, "flags") );
+      */
+
+      drawPAD ( strtod( json_GetKeyItem(tyObj, "cx") ),
+                strtod( json_GetKeyItem(tyObj, "cy") ),
+                strtod( json_GetKeyItem(tyObj, "diameter") ),
+                strtod( json_GetKeyItem(tyObj, "drill") ),
+                        //shape, //shapeC, //json_GetKeyItem(tyObj, "shape"), //"1", //shapeOK, //"Octagon", //json_GetKeyItem(tyObj, "shape"), // invalid option Square ?
+                strsub( json_GetKeyItem(tyObj, "shape") , 1, strlen( json_GetKeyItem(tyObj, "shape") )-2), // strip glitchy added qotes
+                strtod( json_GetKeyItem(tyObj, "angle") ),
+                        //flags, //flagsC, //"", //flags, //"", //json_GetKeyItem(tyObj, "flags"), // invalid option "" ?
+                strsub( json_GetKeyItem(tyObj, "flags") , 1, strlen( json_GetKeyItem(tyObj, "flags") )-2), // strip glitchy added qotes
+                        //json_GetKeyItem(tyObj, "name")
+                strsub( json_GetKeyItem(tyObj, "name") , 1, strlen( json_GetKeyItem(tyObj, "name") )-2) // strip glitchy added qotes
+              );
+    } else if(supportedType == "UL_SMD"){
+      //drawSMD ( strtod(tyObj.dx), strtod(tyObj.dy), strtod(tyObj.cx), strtod(tyObj.cy), strtol(tyObj.roundness), strtod(tyObj.angle), tyObj.flags,tyObj.name, strtol(tyObj.layer) ); // strtol() gets ints from strings
+      string flags;
+      sprintf(flags, "%s", json_GetKeyItem(tyObj, "flags") );
+
+      //string dbg = "";
+      //sprintf(dbg, "[%s]", json_GetKeyItem(tyObj, "flags") );
+      //dlgMessageBox(dbg,"+OK");
+      drawSMD ( strtol( json_GetKeyItem(tyObj, "dx") ),
+                strtol( json_GetKeyItem(tyObj, "dy") ),
+                strtod( json_GetKeyItem(tyObj, "cx") ),
+                strtod( json_GetKeyItem(tyObj, "cy") ),
+                strtol( json_GetKeyItem(tyObj, "roundness") ),
+                strtod( json_GetKeyItem(tyObj, "angle") ),
+                        //"", //flags, //"", //json_GetKeyItem(tyObj, "flags"),
+                strsub( json_GetKeyItem(tyObj, "flags") , 1, strlen( json_GetKeyItem(tyObj, "flags") )-2), // strip glitchy added qotes
+                        //json_GetKeyItem(tyObj, "name"),
+                strsub( json_GetKeyItem(tyObj, "name") , 1, strlen( json_GetKeyItem(tyObj, "name") )-2), // strip glitchy added qotes
+                strtol( json_GetKeyItem(tyObj, "layer") )
+              );
+    } else if(supportedType == "UL_WIRE"){
+      //dlgMessageBox("UL_WIRE is not yet supported :/","+OK");
+
+      real strokeWidth = strtod( json_GetKeyItem(tyObj, "strokeWidth") );
+      string pathPoints = json_GetKeyItem(tyObj, "pathPoints");
+      //int pathPtsLen = json_GetArrayCount(typedObjects);
+      int pathPtsLen = json_GetArrayCount(pathPoints);
+      for(int j=0; j < pathPtsLen; j++){
+        string pathPointObj = json_GetArrayItem(pathPoints, j); // get that pathPoint
+        real x1 = strtod( json_GetArrayItem(pathPointObj, 0) );
+        real y1 = strtod( json_GetArrayItem(pathPointObj, 1) );
+        real x2 = strtod( json_GetArrayItem(pathPointObj, 2) );
+        real y2 = strtod( json_GetArrayItem(pathPointObj, 3) );
+        drawLine(x1, y1, x2, y2, 21, strokeWidth, 2); // draw continuous line on layer 21 <ith wire_bend 2
+        //drawLine(x1, y1, x2, y2, 21, 0.25, 2); // draw continuous line on layer 21 <ith wire_bend 2
+      }
+
+
+
+    } else if(supportedType == "UL_POLYGON"){
+      //dlgMessageBox("UL_POLYGON is not yet supported :/","+OK");
+
+      real strokeWidth = strtod( json_GetKeyItem(tyObj, "strokeWidth") );
+      if( json_GetKeyItem(tyObj, "stroked") == "true" ){
+        //dlgMessageBox("UL_POLYGON is stroked > drawing it as an UL_WIRE","+OK");
+        // draw it as an UL_WIRE
+        string pathPoints = json_GetKeyItem(tyObj, "pathPoints");
+        //int pathPtsLen = json_GetArrayCount(typedObjects);
+        int pathPtsLen = json_GetArrayCount(pathPoints);
+        for(int j=0; j < pathPtsLen; j++){
+          string pathPointObj = json_GetArrayItem(pathPoints, j); // get that pathPoint
+          real x1 = strtod( json_GetArrayItem(pathPointObj, 0) );
+          real y1 = strtod( json_GetArrayItem(pathPointObj, 1) );
+          real x2 = strtod( json_GetArrayItem(pathPointObj, 2) );
+          real y2 = strtod( json_GetArrayItem(pathPointObj, 3) );
+          drawLine(x1, y1, x2, y2, 21, strokeWidth, 2); // draw continuous line on layer 21 <ith wire_bend 2
+          //drawLine(x1, y1, x2, y2, 21, 0.25, 2); // draw continuous line on layer 21 <ith wire_bend 2 --> worked fine but didn't take strokeWidth in account
+        }
+
+      } else if ( json_GetKeyItem(tyObj, "stroked") == "false" ){
+        //dlgMessageBox("UL_POLYGON is filled > drawing it as an UL_POLYGON","+OK");
+
+        // draw it as a polygon
+        string pathPoints = json_GetKeyItem(tyObj, "pathPoints");
+        string parsedPoints = ""; // 'll be filled with parsed points coords & passed as a string to the function drawing polygons
+        string currParsedPoints = ""; // used while loopig as string buffer
+        //int pathPtsLen = json_GetArrayCount(typedObjects);
+        int pathPtsLen = json_GetArrayCount(pathPoints);
+        string dbgText = "UL_POLYGON has ";
+        sprintf(dbgText, "%d points in it", pathPtsLen);
+        //dlgMessageBox(dbgText,"+OK");
+        for(int j=0; j < pathPtsLen; j++){
+          string pathPointObj = json_GetArrayItem(pathPoints, j); // get that pathPoint
+          real x1 = strtod( json_GetArrayItem(pathPointObj, 0) );
+          real y1 = strtod( json_GetArrayItem(pathPointObj, 1) );
+          //string currParsedPoints = "";
+          sprintf(currParsedPoints, "(%f %f) ", x1, y1); // add parsed points coords to str that 'll be passed to the 'drawPolygon'
+          parsedPoints += currParsedPoints;
+          currParsedPoints = "";
+        }
+        //drawPolygon(strokeWidth, 21, parsedPoints); // makes script crash .. no longer crash, but doesn't work & prevent other stuff from working ..
+        // R: we need to re-add the 1st pt to get a closed polygon
+        /* -- the following may be not mandatory sine I fixed the exporting side ..
+        string firstPathPointObj = json_GetArrayItem(pathPoints, 0);
+        real firstX1 = strtod( json_GetArrayItem(firstPathPointObj, 0) );
+        real firstY1 = strtod( json_GetArrayItem(firstPathPointObj, 1) );
+        //string currParsedPoints = "";
+        sprintf(currParsedPoints, "(%f %f) ", firstX1, firstY1); // add parsed points coords to str that 'll be passed to the 'drawPolygon'
+        parsedPoints += currParsedPoints;
+        currParsedPoints = "";
+        */
+
+        drawPolygon(strokeWidth, 21, parsedPoints); //work, plz :)
+
+        dbgText = ""; sprintf(dbgText, "UL_POLYGON path pts coords : [%s]", parsedPoints);
+        //dlgMessageBox(dbgText,"+OK");
+
+
+      } else {
+        dlgMessageBox("We have a UL_POLYGON neither filled nor stroked ?! .. :/","+OK");
+      }
+
+    }
+
+  }
+}
+
+// ==== JSON PARSING ====
+void parseJson(){
+  //fileread(json_data,filedir(argv[0]) + "package.json"); // read json data from file - TODO: de-hardcode that ;p
+  //fileread(json_data,filedir(argv[0]) + "package_gen.json"); // read json data from file - TODO: de-hardcode that ;p
+
+  string jsonFilePath = dlgFileOpen("--> Please indicate where to load the package.json file to exported from Illustrator <--",
+                                    ".",
+                                    "JSON File (*.json);;All files (*)");
+  if(jsonFilePath == "") exit(0);
+  int jsonFileLen = fileread(json_data, jsonFilePath);
+  if(jsonFileLen < 1) exit(0);
+
+
+  // for all supported types, parse & generate the corresponding object
+  //for(int i=0; i < supportedTypes.length; i++){
+  //int len = sizeof(supportedTypes) / sizeof(supportedTypes[0]); // no sizeof ? ! :/
+  //int len = 3;
+  //int len = 4;
+  //int len = 5;
+  int len = 6;
+  for(int i=0; i < len; i++){
+    generateObjectFromJson(supportedTypes[i]);
+  }
+}
+
+
+
+// -- PARTS GENERATION --
+void handlePartGeneration() {
+  //testLibraryPackagesListing(); // run fine for ALL PACKAGES IN AN CURRENTLY OPEN LIB !
+  //testTextGeneration(); // seems to work aside for the need for clicking at the end ?
+  //testHolesListing(); // works
+  //testHoleGeneration(); // works
+  //drawHole( -8.0, -8.0, 2.0); // works
+  //drawHole( 8.0, -8.0, 3.0); // works
+  //drawHole( 8.0, 8.0, 1.0); // works
+  // API - drawSMD (real dx, real dy, real cx, real cy, int roundness, real angle, string flags, string name, int layer)
+  // TODO: fix the layer glitch !
+  //drawSMD (5.0, 10.0, -5, -5, 0, 0, "", "mySmdPad", 1); // R: layers for SMD are either 1 ( Top ) or 16 ( Bottom )
+  //drawSMD (2.5, 1.0, 5, -5, 0, 0, "", "smdNumber2", 16); // R: layers for SMD are either 1 ( Top ) or 16 ( Bottom )
+  // API - drawPAD (real cx, real cy, real diameter, real drill, string shape, real angle, string flags, string name)
+  //drawPAD (5.0, -5.0, 3.0, 1.5, "Square", 0.0, "", "myLittlPad");
+  //drawPAD (15.0, -5.0, 3.0, 1.5, "Round", 0.0, "", "myLittlPad2");
+  //drawPAD (20.0, -5.0, 3.0, 1.5, "Octagon", 0.0, "", "myLittlPad3");
+  //drawPAD (25.0, -5.0, 3.0, 1.5, "Long", 0.0, "", "myLittlPad4");
+  //drawPAD (30.0, -5.0, 3.0, 1.5, "Offset", 0.0, "", "myLittlPad5");
+  //testLineGeneration(); // works
+  //real myPathPoints[] = {
+  /*
+  real myPathPoints[][] = {
+    {10.00, 10.00, 14.08, 10.28},
+    {14.08, 10.28, 12.11, 13.11},
+    {12.11, 13.11, 11.11, 11.85},
+    {11.11, 11.85, 8.73, 12.99},
+    {8.73, 12.99, 10.00, 10.00},
+  };
+  */
+  //drawLine (int layer, real strokeWidth, int wireBend, real[] pathPoints, int pathPointsLen); --> NOT LONGER USED !
+  //drawLine (21, 1.27, 2, myPathPoints, 5); --> NO LONGER USED !
+  /* -- R: the following works fine :)
+  real myPathPoints[] = {
+    10.00, 10.00, 14.08, 10.28,
+    14.08, 10.28, 12.11, 13.11,
+    12.11, 13.11, 11.11, 11.85,
+    11.11, 11.85, 8.73, 12.99,
+    8.73, 12.99, 10.00, 10.00
+  };
+  // void drawLine (real x1, real y1, real x2, real y2, int layer, real strokeWidth, int wireBend) {
+  for(int i=0; i < (4*5)+1; i+=4){
+    real x1 = myPathPoints[i];
+    real y1 = myPathPoints[i+1];
+    real x2 = myPathPoints[i+2];
+    real y2 = myPathPoints[i+3];
+    //drawLine(x1, y1, x2, y2, 21, 1.27, 2); // works fine ( tPlace layer )
+    //drawLine(x1, y1, x2, y2, 1, 1.27, 2); // works fine ( top layer )
+    drawLine(x1, y1, x2, y2, 16, 0.25, 2); // works fine ( bottom layer )
+  }
+  */
+
+  //CMD += "CHANGE LAYER 21; POLYGON 1 (1 1) (2 1) (2 -1) (1 -1);\n";
+  //testPolygonGeneration(); // works ? -> doesn't seem to :/ ..
+
+  parseJson(); // TODO: comment/uncomment for quick debug ;)
+
+  // dummy yet working ppolygon generation ?
+  //drawPolygon(0.38, 21, "(-12.434 -2.499) (-10.644 -2.499) (-10.644 -4.309) (-12.434 -4.309)"); // also screw up things TODO: find why ?!
+  //drawPolygon(0.04, 21, "(-12.434 -2.499) (-10.644 -2.499) (-10.644 -4.309) (-12.434 -4.309) (-12.434 -2.499)"); // WORKED INSTANTAENOUSLY !!! while already drawing polygon in UI ..
+
+  /*
+  CMD += "GRID MM;\n"; // change grid & units to mm
+  //CMD += "SET WIDTH 1.38;\n"; // change line width
+  CMD += "CHANGE POUR SOLID;\n"; // generate either a filled polygon ( other opts hatched or cutout-> limited to signal layers )
+  CMD += "SET WIRE_BEND 2;\n"; // may be useful
+  //CMD += "MITER xxx;\n"; // may be useful
+  //CMD += "CHANGE THERMALS on/off;\n";
+  //CMD += "CHANGE ORPHANS on/off;\n";
+  //CMD += "ISOLATE xxx;\n";
+  //CMD += "RANK xxx;\n";
+  //CMD += "SPACING xxx;\n";
+  //CMD += "SET WIDTH 1.38;\n"; // change line width
+  //CMD += "CHANGE POUR SOLID;\n"; // generate either a filled polygon ( other opts hatched or cutout-> limited to signal layers )
+  CMD += "CHANGE LAYER 1;\n";
+  //CMD += "POLYGON width (1 1) (2 1) (2 -1) (1 -1);\n"; // worked for me once in the Eagle UI on layer 21
+  //CMD += "POLYGON 1.0 (1.0 1.0) (2.0 1.0) (2.0 -1.0) (1.0 -1.0);\n";
+  real x1 = 1.0, y1 = 1.0, x2 = 2.0, y2 = 1.0, x3 = 2.0, y3 = -1.0, x4 = 1.0, y4 = -1.0;
+  text = ""; sprintf(text, "POLYGON %f '%s' (R%.4f %.4f) (R%.4f %.4f) (R%.4f %.4f) (R%.4f %.4f) ;\n", 1.0, "fakeSignalName", x1, y1, x2, y2, x3, y3, x4, y4); CMD += text;
+  //text = ""; sprintf(text, "CHANGE LAYER 1; POLYGON %f (R%.4f %.4f) (R%.4f %.4f) (R%.4f %.4f) (R%.4f %.4f);\n", 0.1, x1*2, y1*2, x2*2, y2*2, x3*2, y3*2, x4*2, y4*2); CMD += text; // only on board for signal alert ..
+  */
+}
+
+
+// ==== CONTEXT ====
+// make sure we're on a "package" type of window, to get the right context ( from which dimensions seems to be retrieved/adjusted ? .. )
+if (package) {
+  dlgMessageBox("We are in the Package Editor","+OK");
+  //CMD += "SET UNDO_LOG OFF;\n";  // toggle hist off while we generate everything ( to be able to 'undo' quickly at once -> but no :/)
+  handlePartGeneration();
+  //CMD += "SET UNDO_LOG ON;\n";  // toggle hist back on
+  CMD += "WINDOW FIT;\n"; // adjust view to show everything
+  exit(CMD); // execute the generated commands
+  // R: I needed to left click to position the generated text ..
+} else {
+  dlgMessageBox("! Open this ULP from Package Editor","+OK");
+  exit(-1); // exit with error
+}
+
+
+/*
+
+trying stuff on the future json parser ..
+
+Set Wire_Bend 2;
+CHANGE LAYER 21;
+Change Font Vector;
+Wire 1 (10.00 10.00) (14.08 10.28);
+Wire 1 (14.08 10.28) (12.11 13.11);
+Wire 1 (12.11 13.11) (11.11 11.85);
+Wire 1 (11.11 11.85) (8.73 12.99);
+Wire 1 (8.73 12.99) (10.00 10.00);
+Window Fit;
+
+*/
