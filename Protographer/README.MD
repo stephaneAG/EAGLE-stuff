@@ -1,3 +1,6 @@
+### PROTOGRAPHER
+<img src="./illustratorToEagle_PolygonsMadeOfFakeCurvesWithManyAnchorPts.png"/>
+
 ### References
 
 Nb: the Eagle Help menu is complementary to the manual ( is almost as useful as stackoverflow answers & forums digging .. )
@@ -23,7 +26,8 @@ Getting enough anchor pts for a particular resolution to get neat curves
 
 ### Related
 - https://www.instructables.com/id/Adding-Custom-Graphics-to-EAGLE-PCB-Layouts/
-- 
+- https://hackaday.com/2017/08/30/how-to-do-pcb-art-in-eagle/
+- https://todbot.com/blog/2011/06/06/from-illustrator-to-eagle-vector-graphics-in-circuits/comment-page-1/
 
 ### Protographer summary
 
