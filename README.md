@@ -9,6 +9,10 @@ Repo dedicated to the EAGLE software &amp; Cie
 - https://www.allaboutcircuits.com/technical-articles/extend-eagle-cad-tool-with-ulps-writing-your-first-user-language-progr/
 - https://www.allaboutcircuits.com/technical-articles/eagle-cad-tips-and-tricks/
 
+### HaD articles:
+- https://hackaday.com/2016/09/22/making-a-pcb-eagle-part-1/
+- https://hackaday.com/2016/09/23/making-a-pcb-eagle-part-2/
+- https://hackaday.com/2016/09/29/creating-a-pcb-in-everything-eagle-drc-and-gerber-files/
 
 ### Interesting plugins:
 - https://atadiat.com/en/e-libit-eagle-cad-ulp-creating-parts-footprint/
